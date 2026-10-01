@@ -1,0 +1,207 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeveloperRole {
+  DEVELOPER
+  SUPER_ADMIN
+  OPS_MANAGER
+}
+
+enum ActorType {
+  SUPPLIER
+  CUSTOMER
+  DEVELOPER
+  SYSTEM
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum AnnouncementType {
+  GLOBAL_BROADCAST
+  CATEGORY_BROADCAST
+  TARGETED_PARTNER
+  MAINTENANCE
+  POLICY_UPDATE
+}
+
+enum SyncStatus {
+  SYNCED
+  PENDING
+  FAILED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         DeveloperRole @default(DEVELOPER)
+  isActive     Boolean       @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  announcements Announcement[]
+
+  @@index([email])
+}
+
+model Supplier {
+  id              String         @id
+  supplierName    String
+  supplierGroup   String?        @default("All Supplier Groups")
+  supplierType    String?        @default("Company")
+  country         String?        @default("India")
+  pan             String?
+  gstin           String?
+  email           String?
+  phone           String?
+  website         String?
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  erpnextDocName  String?
+  syncStatus      SyncStatus     @default(SYNCED)
+  lastSyncedAt    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  users           SupplierUser[]
+  activities      ActivityLog[]
+  recipients      NotificationRecipient[]
+
+  @@index([supplierName])
+  @@index([supplierGroup])
+  @@index([gstin])
+}
+
+model SupplierUser {
+  id               String      @id @default(uuid())
+  supplierId       String
+  email            String      @unique
+  passwordHash     String
+  contactName      String
+  phone            String?
+  designation      String?
+  isPrimaryContact Boolean     @default(false)
+  isActive         Boolean     @default(true)
+  lastLoginAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  supplier         Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  recipients       NotificationRecipient[]
+
+  @@index([supplierId])
+  @@index([email])
+}
+
+model ERPNextConfig {
+  id            String    @id @default(uuid())
+  companyId     String    @unique @default("default")
+  baseUrl       String
+  apiKey        String
+  apiSecret     String
+  webhookSecret String?
+  company       String    @default("Techo digital")
+  isActive      Boolean   @default(true)
+  lastHeartbeat DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ActivityLog {
+  id           String    @id @default(uuid())
+  actorType    ActorType @default(SUPPLIER)
+  actorId      String?
+  actorName    String?
+  actorEmail   String?
+  supplierId   String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  details      Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([actorType])
+  @@index([supplierId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Announcement {
+  id                   String           @id @default(uuid())
+  title                String
+  message              String
+  type                 AnnouncementType @default(GLOBAL_BROADCAST)
+  targetSupplierGroup  String?
+  targetSupplierId     String?
+  authorId             String?
+  authorName           String?
+  isPinned             Boolean          @default(false)
+  priority             Priority         @default(NORMAL)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  author               User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  recipients           NotificationRecipient[]
+
+  @@index([type])
+  @@index([targetSupplierGroup])
+  @@index([targetSupplierId])
+  @@index([createdAt])
+}
+
+model NotificationRecipient {
+  id             String        @id @default(uuid())
+  announcementId String
+  supplierId     String?
+  supplierUserId String?
+  isRead         Boolean       @default(false)
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  announcement   Announcement  @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  supplier       Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierUser   SupplierUser? @relation(fields: [supplierUserId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([supplierUserId])
+  @@index([isRead])
+}
+
+model SyncLog {
+  id              String      @id @default(uuid())
+  docType         String
+  direction       String      @default("OUTBOUND")
+  operation       String      @default("FETCH")
+  status          String      @default("SUCCESS")
+  recordId        String?
+  erpnextDocName  String?
+  requestPayload  Json?
+  responsePayload Json?
+  errorDetails    String?
+  durationMs      Int?
+  createdAt       DateTime    @default(now())
+
+  @@index([docType])
+  @@index([status])
+  @@index([createdAt])
+}
